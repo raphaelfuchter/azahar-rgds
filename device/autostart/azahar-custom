@@ -1,0 +1,6 @@
+#!/bin/sh
+# Use custom Azahar build (bin/azahar-wrapper -> bin/real/azahar-rgds) instead of /usr/bin/azahar.
+# Revert: delete this file (or the binary) and reboot.
+B=/storage/.config/azahar/bin/azahar-wrapper
+[ -x "$B" ] && [ -x /storage/.config/azahar/bin/real/azahar-rgds ] && ! grep -q " /usr/bin/azahar " /proc/mounts && mount --bind "$B" /usr/bin/azahar
+exit 0

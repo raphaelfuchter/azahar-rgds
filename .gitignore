@@ -1,0 +1,7 @@
+src/
+build/
+build-*/
+.ccache/
+pgo-data/
+*.log
+*.dll

@@ -1,0 +1,25 @@
+{
+  "file_format_version": "1.0.0",
+  "settings_array": [
+    {
+      "app_keys": [
+        "/storage/.config/azahar/bin/real/azahar-rgds"
+      ],
+      "stderr_log": [
+        "error",
+        "warn"
+      ],
+      "layers": [
+        {
+          "control": "auto",
+          "name": "VK_LAYER_LS_frame_generation",
+          "path": "/storage/.config/lsfg-vk/layer/VkLayer_LS_frame_generation.json",
+          "treat_as_implicit_manifest": true
+        },
+        {
+          "control": "unordered_layer_location"
+        }
+      ]
+    }
+  ]
+}

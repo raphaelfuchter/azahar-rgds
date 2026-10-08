@@ -1,0 +1,12 @@
+# Azahar: hotkey exit closes gracefully so the Vulkan pipeline cache is saved.
+# See /storage/.config/azahar/azahar-gexit
+eval "$(declare -f set_kill | sed "1s/set_kill/_orig_set_kill/")"
+set_kill() {
+  if [ "${1}" = "set" ] && [ "${2}" = "-9 azahar" ] && [ -x /storage/.config/azahar/azahar-gexit ]; then
+    killall azahar-gexit 2>/dev/null
+    nohup /storage/.config/azahar/azahar-gexit >/dev/null 2>&1 &
+    _orig_set_kill set "-USR1 azahar-gexit"
+  else
+    _orig_set_kill "$@"
+  fi
+}

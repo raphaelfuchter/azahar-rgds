@@ -1,0 +1,21 @@
+#!/bin/bash
+# Graceful exit helper for Azahar. ROCKNIX hotkey does "killall -9 azahar",
+# which skips Azahar shutdown, so the Vulkan driver pipeline cache
+# (shaders/vulkan/pipeline/*.bin) is never written and every boot recompiles
+# all pipelines (game "freezes" for minutes). Hotkey now sends USR1 here instead.
+# The custom build runs as "azahar-rgds" so the gptokeyb "killall -9 azahar" misses it.
+export SWAYSOCK=${SWAYSOCK:-/var/run/0-runtime-dir/sway-ipc.0.sock}
+emu_pid() { pidof azahar-rgds || pidof azahar; }
+graceful() {
+  echo "$(date +%T) USR1 recebido" >> /tmp/azahar-gexit.log
+  P=$(emu_pid)
+  [ -n "$P" ] && swaymsg "[pid=$P] kill" >/dev/null 2>&1
+  for i in $(seq 1 60); do emu_pid >/dev/null || { echo "$(date +%T) saiu limpo em ${i}s" >> /tmp/azahar-gexit.log; exit 0; }; sleep 1; done
+  echo "$(date +%T) timeout, -9" >> /tmp/azahar-gexit.log
+  killall -9 azahar-rgds azahar 2>/dev/null
+  exit 0
+}
+trap graceful USR1
+# wait up to 60s for azahar to start, then stay alive while it runs
+for i in $(seq 1 30); do emu_pid >/dev/null && break; sleep 2 & wait $!; done
+while emu_pid >/dev/null; do sleep 2 & wait $!; done
