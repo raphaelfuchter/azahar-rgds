@@ -1,5 +1,5 @@
 diff --git a/src/video_core/gpu.cpp b/src/video_core/gpu.cpp
-index 40f29fe..bbc0312 100644
+index 40f29fe..ef77788 100644
 --- a/src/video_core/gpu.cpp
 +++ b/src/video_core/gpu.cpp
 @@ -2,6 +2,10 @@
@@ -13,7 +13,7 @@ index 40f29fe..bbc0312 100644
  #include "common/archives.h"
  #include "common/hacks/hack_manager.h"
  #include "common/microprofile.h"
-@@ -256,7 +260,23 @@ void GPU::Execute(const Service::GSP::Command& command) {
+@@ -256,7 +260,48 @@ void GPU::Execute(const Service::GSP::Command& command) {
      }
  }
  
@@ -23,12 +23,37 @@ index 40f29fe..bbc0312 100644
 +// Present-new-only hack: set when the displayed image may have changed since the last present.
 +static bool g_display_dirty = true;
 +
++// Frameskip hack (AZAHAR_FRAMESKIP=N): render 1 of every N+1 game frames.
++static u32 FrameSkip() {
++    static const u32 frame_skip = [] {
++        const char* env = std::getenv("AZAHAR_FRAMESKIP");
++        return env ? static_cast<u32>(std::strtoul(env, nullptr, 10)) : 0u;
++    }();
++    return frame_skip;
++}
++
++// Advanced on every top-screen buffer swap (the game's frame boundary), so 30fps games are
++// skipped per game frame rather than per vblank, which could split a frame in half.
++static void AdvanceFrameskip(Pica::PicaCore& pica) {
++    if (!FrameSkip()) {
++        return;
++    }
++    static const bool top_only = [] {
++        const char* env = std::getenv("AZAHAR_FRAMESKIP_MODE");
++        return env && std::string_view{env} == "top";
++    }();
++    static u32 frame_count = 0;
++    pica.skip_top_only = top_only;
++    pica.skip_draws = (++frame_count % (FrameSkip() + 1)) != 0;
++}
++
  void GPU::SetBufferSwap(u32 screen_id, const Service::GSP::FrameBufferInfo& info) {
 +    if (!g_stale_framebuffers.empty() &&
 +        std::ranges::find(g_stale_framebuffers, VirtualToPhysicalAddress(info.address_left)) !=
 +            g_stale_framebuffers.end()) [[unlikely]] {
 +        if (screen_id == 0) {
 +            impl->system.perf_stats->EndGameFrame();
++            AdvanceFrameskip(impl->pica);
 +        }
 +        return;
 +    }
@@ -37,7 +62,15 @@ index 40f29fe..bbc0312 100644
      const PAddr phys_address_left = VirtualToPhysicalAddress(info.address_left);
      const PAddr phys_address_right = VirtualToPhysicalAddress(info.address_right);
  
-@@ -459,17 +479,54 @@ void GPU::MemoryTransfer() {
+@@ -283,6 +328,7 @@ void GPU::SetBufferSwap(u32 screen_id, const Service::GSP::FrameBufferInfo& info
+         MicroProfileFlip();
+         impl->system.perf_stats->EndGameFrame();
+         right_eye_disabler->ReportEndFrame();
++        AdvanceFrameskip(impl->pica);
+     }
+ }
+ 
+@@ -459,17 +505,54 @@ void GPU::MemoryTransfer() {
          impl->debug_context->OnEvent(Pica::DebugContext::Event::IncomingDisplayTransfer, nullptr);
      }
  
@@ -94,26 +127,7 @@ index 40f29fe..bbc0312 100644
                                                             config.input_height)) {
              if (!impl->rasterizer->AccelerateDisplayTransfer(config)) {
                  impl->sw_blitter->DisplayTransfer(config);
-@@ -486,12 +543,42 @@ void GPU::MemoryTransfer() {
- }
- 
- void GPU::VBlankCallback(std::uintptr_t user_data, s64 cycles_late) {
-+    // Frameskip hack (AZAHAR_FRAMESKIP=N): render 1 of every N+1 frames.
-+    static const u32 frame_skip = [] {
-+        const char* env = std::getenv("AZAHAR_FRAMESKIP");
-+        return env ? static_cast<u32>(std::strtoul(env, nullptr, 10)) : 0u;
-+    }();
-+    if (frame_skip) {
-+        static const bool top_only = [] {
-+            const char* env = std::getenv("AZAHAR_FRAMESKIP_MODE");
-+            return env && std::string_view{env} == "top";
-+        }();
-+        impl->pica.skip_top_only = top_only;
-+        static u32 frame_count = 0;
-+        impl->pica.skip_draws = (++frame_count % (frame_skip + 1)) != 0;
-+    }
-+
-     // Signal to GSP that GPU interrupt has occurred
+@@ -490,8 +573,23 @@ void GPU::VBlankCallback(std::uintptr_t user_data, s64 cycles_late) {
      impl->signal_interrupt(Service::GSP::InterruptId::PDC0, 0);
      impl->signal_interrupt(Service::GSP::InterruptId::PDC1, 0);
  
@@ -125,7 +139,7 @@ index 40f29fe..bbc0312 100644
 +    // covers games that write the framebuffer directly from the CPU.
 +    static const bool present_new_only = [] {
 +        const char* env = std::getenv("AZAHAR_PRESENT_NEW_ONLY");
-+        return frame_skip != 0 || (env && env[0] == '1');
++        return FrameSkip() != 0 || (env && env[0] == '1');
 +    }();
 +    static u32 vblanks_since_present = 0;
 +    if (present_new_only && !g_display_dirty && ++vblanks_since_present < 4) {
