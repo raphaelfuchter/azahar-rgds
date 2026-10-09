@@ -1,36 +1,30 @@
 #!/bin/bash
-# Launches the custom Azahar build as process "azahar-rgds" (gptokeyb hotkey does killall -9 azahar;
-# a different name lets azahar-gexit close it cleanly). Options from rgds.cfg (ES rewrites system.cfg
-# and drops keys it doesn't know) or system.cfg, per-game wins over global:
-#   3ds["<rom file name>"].frameskip=N  /  3ds.frameskip=N   render 1 of every N+1 frames (0 = off)
-#   3ds["<rom file name>"].frameskip_mode=top                skip only top-screen draws (safer)
-#   3ds["<rom file name>"].lsfg=M       /  3ds.lsfg=M        lsfg-vk frame generation multiplier (0/1 = off)
-#   3ds.lsfg_flow=F                                          lsfg-vk flow scale 0.25..1.0 (default 0.5)
-CFG="/storage/.config/azahar/rgds.cfg /storage/.config/system/configs/system.cfg"
+# Launches Azahar with the options set in EmulationStation (Advanced game options for 3DS, stored in
+# system.cfg, per-game wins over global; added to the menu by install.sh). All off = original Azahar.
+#   optimized_build=1    bin/real/azahar-rgds (-O3/LTO/PGO + patches); else bin/real/azahar-stock,
+#                        the original /usr/bin/azahar copied there at boot by autostart/azahar-custom
+#   frameskip=N          render 1 of every N+1 game frames (optimized build only)
+#   frameskip_mode=top   only skip top-screen draws (safer); "all" skips every draw
+# Neither binary runs as "azahar", so gptokeyb's killall -9 azahar misses it and azahar-gexit can
+# close it cleanly (that is what saves the shader cache).
+CFG=/storage/.config/system/configs/system.cfg
 GAME="$(basename "${1}")"
 opt() {
   local v
-  v=$(grep -hF "3ds[\"${GAME}\"].$1=" $CFG 2>/dev/null | tail -1 | cut -d= -f2)
-  [ -z "$v" ] && v=$(grep -h "^3ds\.$1=" $CFG 2>/dev/null | tail -1 | cut -d= -f2)
+  v=$(grep -F "3ds[\"${GAME}\"].$1=" "$CFG" 2>/dev/null | tail -1 | cut -d= -f2)
+  [ -z "$v" ] && v=$(grep "^3ds\.$1=" "$CFG" 2>/dev/null | tail -1 | cut -d= -f2)
   echo "$v"
 }
-FS=$(opt frameskip)
-[ -n "$FS" ] && export AZAHAR_FRAMESKIP="$FS"
-FSM=$(opt frameskip_mode)
-[ -n "$FSM" ] && export AZAHAR_FRAMESKIP_MODE="$FSM"
-# fps/speed once per second, for measuring over SSH
-export AZAHAR_FPS_LOG=/tmp/azahar-fps.log
-LSFG=$(opt lsfg)
-if [ -n "$LSFG" ] && [ "$LSFG" -gt 1 ] 2>/dev/null; then
-  # EXPERIMENTAL / not working yet: needs device/lsfg-vk/vk_loader_settings.json installed so the
-  # layer sits above the Mali WSI layer; currently crashes in Vulkan::CreateInstance on the RG DS.
-  L=/storage/.config/lsfg-vk
-  export ENABLE_LSFG=1
-  export LSFG_LEGACY=1 LSFG_DLL_PATH="$L/Lossless.dll" LSFG_MULTIPLIER="$LSFG"
-  export LSFG_FLOW_SCALE="$(opt lsfg_flow)"; [ -z "$LSFG_FLOW_SCALE" ] && LSFG_FLOW_SCALE=0.5
-  export LSFG_PERFORMANCE_MODE=1 AZAHAR_PRESENT_NEW_ONLY=1
+R=/storage/.config/azahar/bin/real
+BIN=$R/azahar-stock
+if [ "$(opt optimized_build)" = 1 ] && [ -x $R/azahar-rgds ]; then
+  BIN=$R/azahar-rgds
+  FS=$(opt frameskip)
+  [ -n "$FS" ] && [ "$FS" != 0 ] && export AZAHAR_FRAMESKIP="$FS" AZAHAR_FRAMESKIP_MODE="$(opt frameskip_mode)"
+  # fps/speed once per second, for measuring over SSH
+  export AZAHAR_FPS_LOG=/tmp/azahar-fps.log
 fi
 # Main window on the top panel. Runtime rule: /storage/.config/sway/config gets restored by ROCKNIXDS.
 SWAYSOCK=${SWAYSOCK:-/var/run/0-runtime-dir/sway-ipc.0.sock} swaymsg \
   'for_window [app_id="org.azahar_emu.Azahar" title="^(?!.*Secondary).*$"] move window to output DSI-2' >/dev/null 2>&1
-exec /storage/.config/azahar/bin/real/azahar-rgds "$@"
+exec $BIN "$@"

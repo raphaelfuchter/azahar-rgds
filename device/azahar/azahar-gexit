@@ -5,7 +5,7 @@
 # all pipelines (game "freezes" for minutes). Hotkey now sends USR1 here instead.
 # The custom build runs as "azahar-rgds" so the gptokeyb "killall -9 azahar" misses it.
 export SWAYSOCK=${SWAYSOCK:-/var/run/0-runtime-dir/sway-ipc.0.sock}
-emu_pid() { pidof azahar-rgds || pidof azahar; }
+emu_pid() { pidof azahar-rgds || pidof azahar-stock || pidof azahar; }
 graceful() {
   echo "$(date +%T) USR1 recebido" >> /tmp/azahar-gexit.log
   P=$(emu_pid)

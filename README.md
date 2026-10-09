@@ -59,7 +59,8 @@ principal no `DSI-2`.
 
 ## Patch 0100: frameskip
 
-Configurado pela variável `AZAHAR_FRAMESKIP=N`: desenha 1 de cada N+1 frames. Diferente do frameskip
+Configurado pela variável `AZAHAR_FRAMESKIP=N`: desenha 1 de cada N+1 frames do jogo. O contador avança a
+cada swap da tela de cima, então jogos a 30fps também funcionam. Diferente do frameskip
 do Mandarine-Neo, que só pula a apresentação, este pula os draws de verdade, e é isso que alivia a CPU.
 
 - Em frames pulados, `PicaCore::DrawArrays` retorna antes de `AccelerateDrawBatch`. O `delay_generator`
@@ -77,7 +78,7 @@ do Mandarine-Neo, que só pula a apresentação, este pula os draws de verdade, 
 É um hack. Funciona bem no ALBW, mas quebra a renderização no Mario Kart 7 (imagem "comendo" frames,
 tela de baixo branca) e no Super Mario 3D Land (telas azuis). Por isso ele é ligado **por jogo**.
 
-**Modo `top`** (`AZAHAR_FRAMESKIP_MODE=top`, ou `frameskip_mode=top` no `rgds.cfg`): mais seguro. O
+**Modo `top`** (`AZAHAR_FRAMESKIP_MODE=top`, ou "top screen only" no ES): mais seguro. O
 patch aprende quais render targets são copiados para o framebuffer da tela de cima e pula só os draws
 neles. Também só descarta as cópias que saem desses targets. Tela de baixo e render-to-texture seguem
 normais. Economiza menos, mas não mexe no que o jogo usa para montar a imagem.
@@ -119,18 +120,20 @@ A instalação não modifica o sistema. O binário fica em `/storage/.config/aza
 e o autostart faz bind mount de um wrapper sobre `/usr/bin/azahar`. Para voltar ao Azahar original,
 apague `/storage/.config/autostart/azahar-custom` e reinicie.
 
-## Opções por jogo
+## Opções no EmulationStation
 
-Ficam em `/storage/.config/azahar/rgds.cfg`. Não use o `system.cfg` para elas: o EmulationStation
-regrava esse arquivo e apaga as chaves que não conhece. A configuração por jogo tem prioridade sobre a global.
+O `install.sh` acrescenta três opções às opções avançadas do 3DS no ES
+(`/storage/.config/emulationstation/es_features.cfg`). Elas valem globalmente ou por jogo:
 
-```
-3ds["<arquivo da rom>.3ds"].frameskip=1           # frameskip só nesse jogo
-3ds["<arquivo da rom>.3ds"].frameskip_mode=top    # só pula draws da tela de cima
-3ds.frameskip=0                                   # global (padrão: desligado)
-```
+| Opção | Valores | Chave no `system.cfg` |
+|---|---|---|
+| optimized build | on / off (Azahar original) | `optimized_build` |
+| frameskip | off / 1 de 2 / 1 de 3 | `frameskip` |
+| frameskip mode | all draws / top screen only | `frameskip_mode` |
 
-A CPU emulada continua sendo configurada pelo menu do ROCKNIX (`cpu_speed`: 1=90% ... 5=50%).
+Com tudo desligado, o wrapper roda o Azahar original do ROCKNIX. O autostart copia o binário original
+para `bin/real/azahar-stock` antes do bind mount esconder `/usr/bin/azahar`. Frameskip só funciona na
+build otimizada. A instalação liga `3ds.optimized_build=1` como padrão global.
 
 O wrapper também aplica a regra do sway que põe a janela principal no `DSI-2` a cada execução, porque o
 ROCKNIXDS restaura `/storage/.config/sway/config`.
@@ -144,7 +147,7 @@ repositório: cada um precisa do próprio. O estado atual no RG DS:
 - A camada WSI implícita da Mali (`VK_LAYER_window_system_integration`) implementa o swapchain
   sozinha. O lsfg precisa ficar acima dela, o que é feito via `device/lsfg-vk/vk_loader_settings.json`.
 - `device/lsfg-vk/lsfg-vk-v1.0.0-rgds.patch` aceita instâncias sem extensões de superfície.
-- Ainda falha: o Azahar cai com `SIGSEGV` (ponteiro nulo) em `Vulkan::CreateInstance` quando o lsfg
+- O wrapper não liga mais o lsfg (ficou fora da build). Ainda falha: o Azahar cai com `SIGSEGV` (ponteiro nulo) em `Vulkan::CreateInstance` quando o lsfg
   está na cadeia acima da WSI da Mali.
 
 ## Licença

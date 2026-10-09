@@ -1,0 +1,13 @@
+          <feature name="optimized build">
+            <choice name="on" value="1"/>
+            <choice name="off (original azahar)" value="0"/>
+          </feature>
+          <feature name="frameskip">
+            <choice name="off" value="0"/>
+            <choice name="render 1 of 2 frames" value="1"/>
+            <choice name="render 1 of 3 frames" value="2"/>
+          </feature>
+          <feature name="frameskip mode">
+            <choice name="all draws" value="all"/>
+            <choice name="top screen only (safer)" value="top"/>
+          </feature>

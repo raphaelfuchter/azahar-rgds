@@ -1,6 +1,10 @@
 #!/bin/sh
-# Use custom Azahar build (bin/azahar-wrapper -> bin/real/azahar-rgds) instead of /usr/bin/azahar.
-# Revert: delete this file (or the binary) and reboot.
+# Routes /usr/bin/azahar through bin/azahar-wrapper, which picks the optimized or the original build
+# per game. Keeps a copy of the original as bin/real/azahar-stock (the bind mount hides it).
+# Revert: delete this file and reboot.
 B=/storage/.config/azahar/bin/azahar-wrapper
-[ -x "$B" ] && [ -x /storage/.config/azahar/bin/real/azahar-rgds ] && ! grep -q " /usr/bin/azahar " /proc/mounts && mount --bind "$B" /usr/bin/azahar
+S=/storage/.config/azahar/bin/real/azahar-stock
+grep -q " /usr/bin/azahar " /proc/mounts && exit 0
+cmp -s /usr/bin/azahar $S || cp /usr/bin/azahar $S
+[ -x "$B" ] && [ -x $S ] && mount --bind "$B" /usr/bin/azahar
 exit 0
