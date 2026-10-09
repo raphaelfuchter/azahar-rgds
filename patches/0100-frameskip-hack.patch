@@ -1,18 +1,19 @@
 diff --git a/src/video_core/gpu.cpp b/src/video_core/gpu.cpp
-index 40f29fe..2875f73 100644
+index 40f29fe..bbc0312 100644
 --- a/src/video_core/gpu.cpp
 +++ b/src/video_core/gpu.cpp
-@@ -2,6 +2,9 @@
+@@ -2,6 +2,10 @@
  // Licensed under GPLv2 or any later version
  // Refer to the license.txt file included.
  
 +#include <algorithm>
 +#include <cstdlib>
++#include <string_view>
 +#include <vector>
  #include "common/archives.h"
  #include "common/hacks/hack_manager.h"
  #include "common/microprofile.h"
-@@ -256,7 +259,23 @@ void GPU::Execute(const Service::GSP::Command& command) {
+@@ -256,7 +260,23 @@ void GPU::Execute(const Service::GSP::Command& command) {
      }
  }
  
@@ -36,15 +37,35 @@ index 40f29fe..2875f73 100644
      const PAddr phys_address_left = VirtualToPhysicalAddress(info.address_left);
      const PAddr phys_address_right = VirtualToPhysicalAddress(info.address_right);
  
-@@ -459,17 +478,34 @@ void GPU::MemoryTransfer() {
+@@ -459,17 +479,54 @@ void GPU::MemoryTransfer() {
          impl->debug_context->OnEvent(Pica::DebugContext::Event::IncomingDisplayTransfer, nullptr);
      }
  
 +    // Frameskip hack: if draws were dropped since the last transfer, the source holds an
 +    // incomplete image. Drop the transfer too, keeping the destination's last good frame.
++    // In "top" mode only draws into top-screen render targets are dropped, so only transfers
++    // out of those targets are; everything else (bottom screen, render-to-texture) runs as usual.
++    const PAddr input_addr = config.GetPhysicalInputAddress();
 +    const PAddr output_addr = config.GetPhysicalOutputAddress();
-+    const bool drop_transfer = impl->pica.draws_skipped;
-+    impl->pica.draws_skipped = false;
++    auto& pica = impl->pica;
++    const bool from_top_target =
++        std::ranges::find(pica.top_targets, input_addr) != pica.top_targets.end();
++    if (pica.skip_top_only && !config.is_texture_copy && !from_top_target) {
++        const auto& top = pica.regs.framebuffer_config[0];
++        if (output_addr == top.address_left1 || output_addr == top.address_left2) {
++            static u32 next_slot = 0;
++            pica.top_targets[next_slot++ % pica.top_targets.size()] = input_addr;
++        }
++    }
++    bool drop_transfer = pica.draws_skipped;
++    if (pica.skip_top_only) {
++        drop_transfer = drop_transfer && from_top_target;
++        if (from_top_target) {
++            pica.draws_skipped = false;
++        }
++    } else {
++        pica.draws_skipped = false;
++    }
 +    if (drop_transfer) [[unlikely]] {
 +        if (std::ranges::find(g_stale_framebuffers, output_addr) == g_stale_framebuffers.end()) {
 +            g_stale_framebuffers.push_back(output_addr);
@@ -73,7 +94,7 @@ index 40f29fe..2875f73 100644
                                                             config.input_height)) {
              if (!impl->rasterizer->AccelerateDisplayTransfer(config)) {
                  impl->sw_blitter->DisplayTransfer(config);
-@@ -486,12 +522,37 @@ void GPU::MemoryTransfer() {
+@@ -486,12 +543,42 @@ void GPU::MemoryTransfer() {
  }
  
  void GPU::VBlankCallback(std::uintptr_t user_data, s64 cycles_late) {
@@ -83,6 +104,11 @@ index 40f29fe..2875f73 100644
 +        return env ? static_cast<u32>(std::strtoul(env, nullptr, 10)) : 0u;
 +    }();
 +    if (frame_skip) {
++        static const bool top_only = [] {
++            const char* env = std::getenv("AZAHAR_FRAMESKIP_MODE");
++            return env && std::string_view{env} == "top";
++        }();
++        impl->pica.skip_top_only = top_only;
 +        static u32 frame_count = 0;
 +        impl->pica.skip_draws = (++frame_count % (frame_skip + 1)) != 0;
 +    }
@@ -114,27 +140,31 @@ index 40f29fe..2875f73 100644
      // Reschedule recurrent event
      impl->timing.ScheduleEvent(FRAME_TICKS - cycles_late, impl->vblank_event);
 diff --git a/src/video_core/pica/pica_core.cpp b/src/video_core/pica/pica_core.cpp
-index 910ebc2..e075c8f 100644
+index 910ebc2..41e00cf 100644
 --- a/src/video_core/pica/pica_core.cpp
 +++ b/src/video_core/pica/pica_core.cpp
-@@ -1078,6 +1078,12 @@ void PicaCore::DrawArrays(bool is_indexed) {
+@@ -1078,6 +1078,16 @@ void PicaCore::DrawArrays(bool is_indexed) {
      delay_generator.AddVertices(regs.internal.pipeline.num_vertices,
                                  regs.internal.pipeline.triangle_topology);
  
 +    // Frameskip hack: drop the draw entirely on skipped frames.
 +    if (skip_draws) [[unlikely]] {
-+        draws_skipped = true;
-+        return;
++        const PAddr color = regs.internal.framebuffer.framebuffer.GetColorBufferPhysicalAddress();
++        if (!skip_top_only ||
++            (color != 0 && std::ranges::find(top_targets, color) != top_targets.end())) {
++            draws_skipped = true;
++            return;
++        }
 +    }
 +
      // Attempt to use hardware vertex shaders if possible.
      if (accelerate_draw && rasterizer->AccelerateDrawBatch(is_indexed)) {
          return;
 diff --git a/src/video_core/pica/pica_core.h b/src/video_core/pica/pica_core.h
-index 62b0495..835d8e2 100644
+index 62b0495..346caf2 100644
 --- a/src/video_core/pica/pica_core.h
 +++ b/src/video_core/pica/pica_core.h
-@@ -369,6 +369,11 @@ public:
+@@ -369,6 +369,15 @@ public:
  
      DelayGenerator delay_generator{};
  
@@ -142,6 +172,10 @@ index 62b0495..835d8e2 100644
 +    bool skip_draws = false;
 +    /// Set when a draw was dropped since the last display/texture transfer.
 +    bool draws_skipped = false;
++    /// Frameskip "top" mode: only draws into these render targets (the ones display-transferred
++    /// to the top screen) are dropped. Empty means not learned yet, so nothing is dropped.
++    bool skip_top_only = false;
++    std::array<PAddr, 4> top_targets{};
 +
  private:
      friend class boost::serialization::access;

@@ -3,6 +3,7 @@
 # a different name lets azahar-gexit close it cleanly). Options from rgds.cfg (ES rewrites system.cfg
 # and drops keys it doesn't know) or system.cfg, per-game wins over global:
 #   3ds["<rom file name>"].frameskip=N  /  3ds.frameskip=N   render 1 of every N+1 frames (0 = off)
+#   3ds["<rom file name>"].frameskip_mode=top                skip only top-screen draws (safer)
 #   3ds["<rom file name>"].lsfg=M       /  3ds.lsfg=M        lsfg-vk frame generation multiplier (0/1 = off)
 #   3ds.lsfg_flow=F                                          lsfg-vk flow scale 0.25..1.0 (default 0.5)
 CFG="/storage/.config/azahar/rgds.cfg /storage/.config/system/configs/system.cfg"
@@ -15,6 +16,10 @@ opt() {
 }
 FS=$(opt frameskip)
 [ -n "$FS" ] && export AZAHAR_FRAMESKIP="$FS"
+FSM=$(opt frameskip_mode)
+[ -n "$FSM" ] && export AZAHAR_FRAMESKIP_MODE="$FSM"
+# fps/speed once per second, for measuring over SSH
+export AZAHAR_FPS_LOG=/tmp/azahar-fps.log
 LSFG=$(opt lsfg)
 if [ -n "$LSFG" ] && [ "$LSFG" -gt 1 ] 2>/dev/null; then
   # EXPERIMENTAL / not working yet: needs device/lsfg-vk/vk_loader_settings.json installed so the

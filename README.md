@@ -26,6 +26,7 @@ A build com PGO é a última etapa. Ela ainda não foi medida.
 | `patches/0001-*` | Patch do ROCKNIX: caminhos de configuração (igual ao pacote `azahar-sa`). |
 | `patches/0003-*` | Patch do ROCKNIX: liberar a surface nativa antes do Wayland destruí-la. Adaptado ao 2126.1.2. |
 | `patches/0100-frameskip-hack.patch` | Frameskip real e "apresentar só frames novos" (ver abaixo). |
+| `patches/0101-fps-log.patch` | Log de fps e velocidade num arquivo, para medir por SSH. |
 | `Dockerfile`, `build.sh` | Ambiente de build arm64 (Debian trixie, glibc 2.41, igual ao ROCKNIX) e script de compilação. |
 | `fetch-src.sh` | Baixa o Azahar 2126.1.2 com submódulos e aplica os patches. |
 | `device/` | Scripts instalados no aparelho e `install.sh`. |
@@ -76,6 +77,16 @@ do Mandarine-Neo, que só pula a apresentação, este pula os draws de verdade, 
 É um hack. Funciona bem no ALBW, mas quebra a renderização no Mario Kart 7 (imagem "comendo" frames,
 tela de baixo branca) e no Super Mario 3D Land (telas azuis). Por isso ele é ligado **por jogo**.
 
+**Modo `top`** (`AZAHAR_FRAMESKIP_MODE=top`, ou `frameskip_mode=top` no `rgds.cfg`): mais seguro. O
+patch aprende quais render targets são copiados para o framebuffer da tela de cima e pula só os draws
+neles. Também só descarta as cópias que saem desses targets. Tela de baixo e render-to-texture seguem
+normais. Economiza menos, mas não mexe no que o jogo usa para montar a imagem.
+
+## Patch 0101: log de fps
+
+Com `AZAHAR_FPS_LOG=<arquivo>`, que o wrapper define como `/tmp/azahar-fps.log`, o Azahar grava fps e
+velocidade a cada segundo. Assim dá para medir por SSH.
+
 ## Compilar
 
 Num host arm64 com Docker. No Mac Apple Silicon: `brew install colima docker && colima start --cpu 8 --memory 12`.
@@ -115,6 +126,7 @@ regrava esse arquivo e apaga as chaves que não conhece. A configuração por jo
 
 ```
 3ds["<arquivo da rom>.3ds"].frameskip=1           # frameskip só nesse jogo
+3ds["<arquivo da rom>.3ds"].frameskip_mode=top    # só pula draws da tela de cima
 3ds.frameskip=0                                   # global (padrão: desligado)
 ```
 

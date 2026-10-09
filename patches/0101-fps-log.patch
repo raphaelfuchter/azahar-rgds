@@ -1,0 +1,35 @@
+diff --git a/src/citra_qt/citra_qt.cpp b/src/citra_qt/citra_qt.cpp
+index f75e16f..fd48d6c 100644
+--- a/src/citra_qt/citra_qt.cpp
++++ b/src/citra_qt/citra_qt.cpp
+@@ -3,6 +3,9 @@
+ // Refer to the license.txt file included.
+ 
+ #include <clocale>
++#include <cstdio>
++#include <cstdlib>
++#include <ctime>
+ #include <iostream>
+ #include <memory>
+ #include <optional>
+@@ -3686,6 +3689,20 @@ void GMainWindow::UpdateStatusBar() {
+                                      .arg(Settings::GetFrameLimit()));
+     }
+     game_fps_label->setText(tr("App: %1 FPS").arg(results.game_fps, 0, 'f', 0));
++    // RG DS: log fps/speed once per second when AZAHAR_FPS_LOG names a file (read over SSH).
++    static std::FILE* fps_log = [] {
++        const char* path = std::getenv("AZAHAR_FPS_LOG");
++        std::FILE* f = path ? std::fopen(path, "w") : nullptr;
++        if (f) {
++            std::setvbuf(f, nullptr, _IOLBF, 0);
++        }
++        return f;
++    }();
++    if (fps_log) {
++        std::fprintf(fps_log, "%lld fps=%.1f speed=%.0f%%\n",
++                     static_cast<long long>(std::time(nullptr)), results.game_fps,
++                     results.emulation_speed * 100.0);
++    }
+     if (UISettings::values.show_advanced_frametime_info) {
+         emu_frametime_label->setText(
+             tr("Frame: %1 ms (GPU: [CMD: %2 ms, SWP: %3 ms], IPC: %4 ms, SVC: %5 ms, Rem: %6 ms)")
