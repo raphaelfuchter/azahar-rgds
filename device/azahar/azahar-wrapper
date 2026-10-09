@@ -1,15 +1,16 @@
 #!/bin/bash
 # Launches the custom Azahar build as process "azahar-rgds" (gptokeyb hotkey does killall -9 azahar;
-# a different name lets azahar-gexit close it cleanly). Options from ES config, per-game wins over global:
+# a different name lets azahar-gexit close it cleanly). Options from rgds.cfg (ES rewrites system.cfg
+# and drops keys it doesn't know) or system.cfg, per-game wins over global:
 #   3ds["<rom file name>"].frameskip=N  /  3ds.frameskip=N   render 1 of every N+1 frames (0 = off)
 #   3ds["<rom file name>"].lsfg=M       /  3ds.lsfg=M        lsfg-vk frame generation multiplier (0/1 = off)
 #   3ds.lsfg_flow=F                                          lsfg-vk flow scale 0.25..1.0 (default 0.5)
-CFG=/storage/.config/system/configs/system.cfg
+CFG="/storage/.config/azahar/rgds.cfg /storage/.config/system/configs/system.cfg"
 GAME="$(basename "${1}")"
 opt() {
   local v
-  v=$(grep -F "3ds[\"${GAME}\"].$1=" "$CFG" 2>/dev/null | tail -1 | cut -d= -f2)
-  [ -z "$v" ] && v=$(grep "^3ds\.$1=" "$CFG" 2>/dev/null | tail -1 | cut -d= -f2)
+  v=$(grep -hF "3ds[\"${GAME}\"].$1=" $CFG 2>/dev/null | tail -1 | cut -d= -f2)
+  [ -z "$v" ] && v=$(grep -h "^3ds\.$1=" $CFG 2>/dev/null | tail -1 | cut -d= -f2)
   echo "$v"
 }
 FS=$(opt frameskip)
@@ -24,4 +25,7 @@ if [ -n "$LSFG" ] && [ "$LSFG" -gt 1 ] 2>/dev/null; then
   export LSFG_FLOW_SCALE="$(opt lsfg_flow)"; [ -z "$LSFG_FLOW_SCALE" ] && LSFG_FLOW_SCALE=0.5
   export LSFG_PERFORMANCE_MODE=1 AZAHAR_PRESENT_NEW_ONLY=1
 fi
+# Main window on the top panel. Runtime rule: /storage/.config/sway/config gets restored by ROCKNIXDS.
+SWAYSOCK=${SWAYSOCK:-/var/run/0-runtime-dir/sway-ipc.0.sock} swaymsg \
+  'for_window [app_id="org.azahar_emu.Azahar" title="^(?!.*Secondary).*$"] move window to output DSI-2' >/dev/null 2>&1
 exec /storage/.config/azahar/bin/real/azahar-rgds "$@"

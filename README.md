@@ -110,13 +110,18 @@ apague `/storage/.config/autostart/azahar-custom` e reinicie.
 
 ## Opções por jogo
 
-Ficam em `/storage/.config/system/configs/system.cfg`. A configuração por jogo tem prioridade sobre a global.
+Ficam em `/storage/.config/azahar/rgds.cfg`. Não use o `system.cfg` para elas: o EmulationStation
+regrava esse arquivo e apaga as chaves que não conhece. A configuração por jogo tem prioridade sobre a global.
 
 ```
-3ds.cpu_speed=2                                   # CPU emulada 80% (opção do ROCKNIX: 1=90% ... 5=50%)
 3ds["<arquivo da rom>.3ds"].frameskip=1           # frameskip só nesse jogo
 3ds.frameskip=0                                   # global (padrão: desligado)
 ```
+
+A CPU emulada continua sendo configurada pelo menu do ROCKNIX (`cpu_speed`: 1=90% ... 5=50%).
+
+O wrapper também aplica a regra do sway que põe a janela principal no `DSI-2` a cada execução, porque o
+ROCKNIXDS restaura `/storage/.config/sway/config`.
 
 ## Geração de frames (lsfg-vk), experimental
 
